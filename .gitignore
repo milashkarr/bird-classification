@@ -11,3 +11,5 @@ data/processed/
 models/
 metrics/
 
+/chroma_db
+/chroma_db_info.json

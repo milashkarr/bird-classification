@@ -1,75 +1,54 @@
 import json
-import pandas as pd
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 
 def create_report():
-    print("Creating DVC project report...")
-
-    report = {
-        "project": "Bird Classification with DVC",
+    report_data = {
         "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "dvc_pipeline": {
-            "stages": ["prepare", "train", "report"],
-            "status": "configured"
-        }
+        "pipeline_stages": 4,
+        "stages": ["prepare", "train", "embeddings", "report"]
     }
 
-    # Читаем метрики данных если есть
-    data_metrics_path = Path("metrics/data_metrics.json")
-    if data_metrics_path.exists():
-        with open(data_metrics_path, 'r') as f:
+    try:
+        with open("metrics/data_metrics.json", "r", encoding="utf-8") as f:
             data_metrics = json.load(f)
-        report["data_metrics"] = data_metrics
-    else:
-        # Примерные данные
-        report["data_metrics"] = {
-            "total_images": 485,
-            "classes": 5,
-            "class_names": ["brambling", "chiffchaff", "goldfinch", "nuthatch", "swallow"]
-        }
+            report_data["data_metrics"] = data_metrics
+    except:
+        report_data["data_metrics"] = "N/A"
 
-    # Читаем метрики обучения если есть
-    train_metrics_path = Path("metrics/train_metrics.json")
-    if train_metrics_path.exists():
-        with open(train_metrics_path, 'r') as f:
+    try:
+        with open("metrics/train_metrics.json", "r", encoding="utf-8") as f:
             train_metrics = json.load(f)
-        report["training_metrics"] = train_metrics
-    else:
-        report["training_metrics"] = {
-            "model": "MobileNetV2",
-            "accuracy": "57-67%",
-            "status": "trained"
-        }
+            report_data["train_metrics"] = train_metrics
+    except:
+        report_data["train_metrics"] = "N/A"
 
-    # Проверяем существование файлов
-    report["files_exist"] = {
-        "raw_data": Path("data/raw").exists(),
-        "processed_data": Path("data/processed").exists(),
-        "models": Path("models").exists(),
-        "metrics": Path("metrics").exists()
+    try:
+        with open("chroma_db_info.json", "r", encoding="utf-8") as f:
+            db_info = json.load(f)
+            report_data["vector_db"] = db_info
+    except:
+        report_data["vector_db"] = "N/A"
+
+    report_data["models_exist"] = {
+        "classification_model": Path("models/best_model.pth").exists(),
+        "vector_database": Path("chroma_db").exists()
     }
 
-    # Сохраняем отчет
-    Path("metrics").mkdir(exist_ok=True)
-    with open("metrics/summary.json", 'w', encoding='utf-8') as f:
-        json.dump(report, f, indent=2, ensure_ascii=False)
+    with open("metrics/summary.json", "w", encoding="utf-8") as f:
+        json.dump(report_data, f, ensure_ascii=False, indent=2)
 
-    print(f"Report saved to metrics/summary.json")
-
-    # Выводим краткую сводку
-    print("\n" + "=" * 60)
+    print("=" * 60)
     print("DVC PROJECT SUMMARY")
     print("=" * 60)
-    print(f"Date: {report['date']}")
-    print(f"Pipeline stages: {len(report['dvc_pipeline']['stages'])}")
-    print(f"Total images: {report['data_metrics'].get('total_images', 'N/A')}")
-    print(f"Classes: {report['data_metrics'].get('classes', 'N/A')}")
-    print(f"Model: {report['training_metrics'].get('model', 'N/A')}")
+    print(f"Date: {report_data['date']}")
+    print(f"Pipeline stages: {report_data['pipeline_stages']}")
+    print(f"Total images: {data_metrics.get('total_images', 'N/A') if isinstance(data_metrics, dict) else 'N/A'}")
+    print(f"Classes: {data_metrics.get('classes', 'N/A') if isinstance(data_metrics, dict) else 'N/A'}")
+    print(f"Model accuracy: {train_metrics.get('best_val_acc', 'N/A') if isinstance(train_metrics, dict) else 'N/A'}%")
+    print(f"Vector DB images: {db_info.get('total_images', 'N/A') if isinstance(db_info, dict) else 'N/A'}")
     print("=" * 60)
-
-    return True
 
 
 if __name__ == "__main__":

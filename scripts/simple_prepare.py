@@ -1,105 +1,140 @@
-import pandas as pd
-import numpy as np
-from sklearn.model_selection import train_test_split
 import os
-import yaml
-import json
+import pandas as pd
 from pathlib import Path
+import json
+import random
+from collections import defaultdict
 
-print("=" * 50)
-print("ПРОСТАЯ ПОДГОТОВКА ДАННЫХ")
-print("=" * 50)
 
-# 1. Собираем все файлы
-data = []
-raw_path = Path("data/raw")
+def prepare_dataset():
+    """Подготовка датасета"""
+    print("=" * 50)
+    print("ПОДГОТОВКА ДАТАСЕТА")
+    print("=" * 50)
 
-for class_folder in raw_path.iterdir():
-    if class_folder.is_dir():
-        class_name = class_folder.name
-        for img_file in class_folder.glob("*.jpg"):
-            data.append({
-                'id': img_file.stem,
+    # Путь к сырым данным
+    raw_data_path = "data/raw"
+
+    # Собираем все изображения по классам
+    image_paths = defaultdict(list)
+
+    for class_name in os.listdir(raw_data_path):
+        class_path = os.path.join(raw_data_path, class_name)
+
+        if os.path.isdir(class_path):
+            # Собираем все изображения
+            for img_name in os.listdir(class_path):
+                if img_name.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif')):
+                    img_path = os.path.join(class_path, img_name)
+                    image_paths[class_name].append(img_path)
+
+    print(f"Всего изображений: {sum(len(imgs) for imgs in image_paths.values())}")
+
+    # Разделение на train/val/test
+    train_data = []
+    val_data = []
+    test_data = []
+
+    print("\nРазделение данных...")
+    for class_name, images in image_paths.items():
+        random.shuffle(images)
+        total = len(images)
+
+        # 70% train, 15% val, 15% test
+        train_split = int(0.7 * total)
+        val_split = int(0.85 * total)
+
+        train_images = images[:train_split]
+        val_images = images[train_split:val_split]
+        test_images = images[val_split:]
+
+        print(f"  {class_name}: {total} -> train:{len(train_images)} val:{len(val_images)} test:{len(test_images)}")
+
+        # Добавляем в train
+        for img_path in train_images:
+            train_data.append({
+                'id': Path(img_path).stem,
                 'class_name': class_name,
-                'local_path': str(img_file.absolute())
+                'local_path': img_path,
+                'label': list(image_paths.keys()).index(class_name)
             })
 
-df = pd.DataFrame(data)
-print(f"Найдено изображений: {len(df)}")
+        # Добавляем в val
+        for img_path in val_images:
+            val_data.append({
+                'id': Path(img_path).stem,
+                'class_name': class_name,
+                'local_path': img_path,
+                'label': list(image_paths.keys()).index(class_name)
+            })
 
-if len(df) == 0:
-    print("ОШИБКА: Нет изображений!")
-    exit(1)
+        # Добавляем в test
+        for img_path in test_images:
+            test_data.append({
+                'id': Path(img_path).stem,
+                'class_name': class_name,
+                'local_path': img_path,
+                'label': list(image_paths.keys()).index(class_name)
+            })
 
-# 2. Разделяем данные (70/15/15)
-print("\nРазделение данных...")
-train_dfs, val_dfs, test_dfs = [], [], []
+    # Создаем DataFrame
+    train_df = pd.DataFrame(train_data)
+    val_df = pd.DataFrame(val_data)
+    test_df = pd.DataFrame(test_data)
 
-for class_name in df['class_name'].unique():
-    class_df = df[df['class_name'] == class_name]
+    # Сохраняем CSV файлы
+    os.makedirs("data/processed", exist_ok=True)
+    os.makedirs("metrics", exist_ok=True)
 
-    if len(class_df) >= 10:
-        # Простое разделение
-        n_test = int(len(class_df) * 0.15)
-        n_val = int(len(class_df) * 0.15)
+    train_df.to_csv("data/processed/train.csv", index=False)
+    val_df.to_csv("data/processed/val.csv", index=False)
+    test_df.to_csv("data/processed/test.csv", index=False)
 
-        test = class_df.sample(n=n_test, random_state=42)
-        remaining = class_df.drop(test.index)
-        val = remaining.sample(n=n_val, random_state=42)
-        train = remaining.drop(val.index)
+    # Сохраняем информацию о классах
+    class_info = {
+        'classes': list(image_paths.keys()),
+        'class_to_idx': {class_name: idx for idx, class_name in enumerate(image_paths.keys())}
+    }
 
-        train_dfs.append(train)
-        val_dfs.append(val)
-        test_dfs.append(test)
+    with open("data/processed/class_info.yaml", "w", encoding="utf-8") as f:
+        import yaml
+        yaml.dump(class_info, f, default_flow_style=False, allow_unicode=True)
 
-        print(f"  {class_name}: {len(class_df)} -> train:{len(train)} val:{len(val)} test:{len(test)}")
-    else:
-        print(f"  {class_name}: {len(class_df)} - СЛИШКОМ МАЛО, пропускаем")
+    # Сохраняем метрики данных
+    data_metrics = {
+        'total_images': len(train_df) + len(val_df) + len(test_df),
+        'train_count': len(train_df),
+        'val_count': len(val_df),
+        'test_count': len(test_df),
+        'classes': list(image_paths.keys()),
+        'class_distribution': {
+            class_name: {
+                'total': len(images),
+                'train': len([d for d in train_data if d['class_name'] == class_name]),
+                'val': len([d for d in val_data if d['class_name'] == class_name]),
+                'test': len([d for d in test_data if d['class_name'] == class_name])
+            }
+            for class_name in image_paths.keys()
+        }
+    }
 
-# 3. Сохраняем
-print("\nСохранение данных...")
-Path("data/processed").mkdir(exist_ok=True)
-Path("metrics").mkdir(exist_ok=True)
+    with open("metrics/data_metrics.json", "w", encoding="utf-8") as f:
+        json.dump(data_metrics, f, ensure_ascii=False, indent=2)
 
-train_df = pd.concat(train_dfs) if train_dfs else pd.DataFrame()
-val_df = pd.concat(val_dfs) if val_dfs else pd.DataFrame()
-test_df = pd.concat(test_dfs) if test_dfs else pd.DataFrame()
+    print("\nСводка:")
+    print(f"  Train: {len(train_df)}")
+    print(f"  Val:   {len(val_df)}")
+    print(f"  Test:  {len(test_df)}")
+    print(f"  Всего: {len(train_df) + len(val_df) + len(test_df)}")
 
-train_df.to_csv("data/processed/train.csv", index=False)
-val_df.to_csv("data/processed/val.csv", index=False)
-test_df.to_csv("data/processed/test.csv", index=False)
+    print(f"\nКлассы: {list(image_paths.keys())}")
 
-print(f"\nИТОГИ:")
-print(f"  Train: {len(train_df)}")
-print(f"  Val:   {len(val_df)}")
-print(f"  Test:  {len(test_df)}")
-print(f"  Всего: {len(train_df) + len(val_df) + len(test_df)}")
+    print("\n" + "=" * 50)
+    print("ГОТОВО!")
+    print("=" * 50)
 
-# 4. Информация о классах
-classes = sorted(df['class_name'].unique().tolist())
-class_info = {
-    'class_names': classes,
-    'class_to_idx': {cls: idx for idx, cls in enumerate(classes)},
-    'idx_to_class': {idx: cls for idx, cls in enumerate(classes)}
-}
+    return True
 
-with open("data/processed/class_info.yaml", 'w', encoding='utf-8') as f:
-    yaml.dump(class_info, f, allow_unicode=True)
 
-print(f"\nКлассы: {classes}")
-
-# 5. Метрики данных
-data_metrics = {
-    'total_images': len(df),
-    'train_size': len(train_df),
-    'val_size': len(val_df),
-    'test_size': len(test_df),
-    'classes': classes
-}
-
-with open("metrics/data_metrics.json", 'w', encoding='utf-8') as f:
-    json.dump(data_metrics, f, indent=2, ensure_ascii=False)
-
-print("\n" + "=" * 50)
-print("ГОТОВО!")
-print("=" * 50)
+if __name__ == "__main__":
+    prepare_dataset()

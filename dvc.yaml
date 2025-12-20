@@ -2,29 +2,45 @@ stages:
   prepare:
     cmd: python scripts/simple_prepare.py
     deps:
+      - scripts/simple_prepare.py
       - data/raw
+    params:
+      - RAW_DATA_PATH
     outs:
       - data/processed/train.csv
       - data/processed/val.csv
       - data/processed/test.csv
       - data/processed/class_info.yaml
-    metrics:
       - metrics/data_metrics.json
-
+  
   train:
     cmd: python scripts/simple_train.py
     deps:
+      - scripts/simple_train.py
       - data/processed/train.csv
       - data/processed/val.csv
     outs:
       - models/best_model.pth
-    metrics:
       - metrics/train_metrics.json
-
+  
+  embeddings:
+    cmd: python scripts/create_embeddings.py
+    deps:
+      - scripts/create_embeddings.py
+      - models/best_model.pth
+      - data/processed/train.csv
+      - data/processed/val.csv
+      - data/processed/test.csv
+    outs:
+      - chroma_db
+      - chroma_db_info.json
+  
   report:
     cmd: python scripts/create_report.py
     deps:
       - metrics/data_metrics.json
       - metrics/train_metrics.json
-    metrics:
+      - chroma_db_info.json
+    outs:
       - metrics/summary.json
+      

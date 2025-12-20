@@ -1,0 +1,11 @@
+{
+    "val_accuracy": 20.833333333333332,
+    "classes": [
+        "brambling",
+        "chiffchaff",
+        "goldfinch",
+        "nuthatch",
+        "swallow"
+    ],
+    "total_params": 2230277
+}

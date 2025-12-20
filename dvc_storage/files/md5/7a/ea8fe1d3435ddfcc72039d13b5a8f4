@@ -1,0 +1,13 @@
+{
+  "total_images": 485,
+  "train_size": 341,
+  "val_size": 72,
+  "test_size": 72,
+  "classes": [
+    "brambling",
+    "chiffchaff",
+    "goldfinch",
+    "nuthatch",
+    "swallow"
+  ]
+}
