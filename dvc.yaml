@@ -1,31 +1,30 @@
 stages:
   prepare:
-    cmd: python scripts/prepare_data.py
+    cmd: python scripts/simple_prepare.py
     deps:
       - data/raw
-      - scripts/prepare_data.py
-    params:
-      - prepare.split_ratio
-      - prepare.image_size
     outs:
       - data/processed/train.csv
       - data/processed/val.csv
       - data/processed/test.csv
+      - data/processed/class_info.yaml
+    metrics:
+      - metrics/data_metrics.json
 
   train:
-    cmd: python scripts/train_model.py
+    cmd: python scripts/simple_train.py
     deps:
       - data/processed/train.csv
       - data/processed/val.csv
-      - scripts/train_model.py
-    params:
-      - train.batch_size
-      - train.epochs
-      - train.learning_rate
-      - train.model_name
     outs:
       - models/best_model.pth
-      - models/last_model.pth
     metrics:
-      - metrics/train_metrics.json:
-          cache: false
+      - metrics/train_metrics.json
+
+  report:
+    cmd: python scripts/create_report.py
+    deps:
+      - metrics/data_metrics.json
+      - metrics/train_metrics.json
+    metrics:
+      - metrics/summary.json

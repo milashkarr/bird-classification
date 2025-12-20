@@ -3,127 +3,138 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 import os
 import yaml
+import json
 from pathlib import Path
 
 
-def prepare_data():
-    # Читаем параметры
-    with open('../params.yaml', 'r') as f:
-        params = yaml.safe_load(f)
+def main():
+    print("=" * 50)
+    print("ПОДГОТОВКА ДАННЫХ")
+    print("=" * 50)
 
-    split_ratio = params['prepare']['split_ratio']
+    # 1. ПАРАМЕТРЫ
+    SPLIT_RATIO = [0.7, 0.15, 0.15]  # По умолчанию
 
-    # Читаем ИСПРАВЛЕННЫЙ CSV
-    csv_path = '../data/image_paths_fixed.csv'
-    if not os.path.exists(csv_path):
-        csv_path = '../data/image_paths.csv'  # fallback
+    # Пробуем прочитать params.yaml
+    if os.path.exists("params.yaml"):
+        try:
+            with open("params.yaml", 'r') as f:
+                params = yaml.safe_load(f)
+                if 'prepare' in params and 'split_ratio' in params['prepare']:
+                    SPLIT_RATIO = params['prepare']['split_ratio']
+            print(f"Параметры загружены: split_ratio = {SPLIT_RATIO}")
+        except Exception as e:
+            print(f"Ошибка чтения params.yaml: {e}")
 
-    df = pd.read_csv(csv_path)
-    print(f"Загружен {csv_path}: {len(df)} записей")
+    # 2. ЗАГРУЗКА ДАННЫХ
+    print("\nЗагрузка данных...")
 
-    # Проверяем существование файлов
-    existing_files = []
-    for idx, row in df.iterrows():
-        path_obj = Path(row['local_path'])
-        if path_obj.exists():
-            existing_files.append(True)
-        else:
-            # Пробуем альтернативный формат пути
-            alt_path = Path(str(path_obj).replace('\\', '/'))
-            if alt_path.exists():
-                df.at[idx, 'local_path'] = str(alt_path)
-                existing_files.append(True)
-            else:
-                existing_files.append(False)
+    # Собираем все файлы из папок
+    data_records = []
+    raw_path = Path("data/raw")
 
-    df_exists = df[existing_files].copy()
-    print(f"\nНайдено существующих файлов: {len(df_exists)} из {len(df)}")
+    for class_folder in raw_path.iterdir():
+        if class_folder.is_dir():
+            class_name = class_folder.name
+            image_files = list(class_folder.glob("*.jpg")) + list(class_folder.glob("*.jpeg"))
 
-    if len(df_exists) == 0:
-        print("ОШИБКА: Не найдено ни одного файла!")
-        return
+            for img_file in image_files:
+                data_records.append({
+                    'id': img_file.stem,
+                    'class_name': class_name,
+                    'local_path': str(img_file.absolute())
+                })
 
-    # Разделяем данные по классам
+    df = pd.DataFrame(data_records)
+    print(f"Найдено изображений: {len(df)}")
+
+    if len(df) == 0:
+        print("ОШИБКА: Нет изображений в data/raw/")
+        return False
+
+    # 3. РАЗДЕЛЕНИЕ НА TRAIN/VAL/TEST
+    print(f"\nРазделение данных (train/val/test): {SPLIT_RATIO}")
+
     train_dfs, val_dfs, test_dfs = [], [], []
 
-    for class_name in df_exists['class_name'].unique():
-        class_df = df_exists[df_exists['class_name'] == class_name]
+    for class_name in df['class_name'].unique():
+        class_df = df[df['class_name'] == class_name]
 
-        print(f"Класс {class_name}: {len(class_df)} изображений")
-
-        if len(class_df) < 5:
-            print(f"  Пропускаем - слишком мало данных")
+        if len(class_df) < 10:
+            print(f"  {class_name}: {len(class_df)} - СЛИШКОМ МАЛО, пропускаем")
             continue
 
-        # Разделяем данные этого класса
-        try:
-            train_val, test = train_test_split(
-                class_df,
-                test_size=split_ratio[2],
-                random_state=42,
-                stratify=class_df['class_name']
-            )
+        # Простое разделение
+        n_test = int(len(class_df) * SPLIT_RATIO[2])
+        n_val = int(len(class_df) * SPLIT_RATIO[1])
 
-            train, val = train_test_split(
-                train_val,
-                test_size=split_ratio[1] / (split_ratio[0] + split_ratio[1]),
-                random_state=42,
-                stratify=train_val['class_name']
-            )
+        # Случайная выборка
+        test = class_df.sample(n=n_test, random_state=42)
+        remaining = class_df.drop(test.index)
+        val = remaining.sample(n=n_val, random_state=42)
+        train = remaining.drop(val.index)
 
-            train_dfs.append(train)
-            val_dfs.append(val)
-            test_dfs.append(test)
+        train_dfs.append(train)
+        val_dfs.append(val)
+        test_dfs.append(test)
 
-        except Exception as e:
-            print(f"  Ошибка при разделении класса {class_name}: {e}")
-            # Простое разделение если stratify не работает
-            train_val, test = train_test_split(class_df, test_size=split_ratio[2], random_state=42)
-            train, val = train_test_split(train_val, test_size=split_ratio[1] / (split_ratio[0] + split_ratio[1]),
-                                          random_state=42)
-            train_dfs.append(train)
-            val_dfs.append(val)
-            test_dfs.append(test)
+        print(f"  {class_name}: {len(class_df)} -> train:{len(train)} val:{len(val)} test:{len(test)}")
 
-    # Объединяем обратно
+    # 4. СОХРАНЕНИЕ
+    print("\nСохранение данных...")
+
+    # Создаем папки
+    Path("data/processed").mkdir(exist_ok=True)
+    Path("metrics").mkdir(exist_ok=True)
+
+    # Объединяем
     train_df = pd.concat(train_dfs) if train_dfs else pd.DataFrame()
     val_df = pd.concat(val_dfs) if val_dfs else pd.DataFrame()
     test_df = pd.concat(test_dfs) if test_dfs else pd.DataFrame()
 
-    # Сохраняем
-    os.makedirs('data/processed', exist_ok=True)
+    # Сохраняем разделенные данные
+    train_df.to_csv("data/processed/train.csv", index=False)
+    val_df.to_csv("data/processed/val.csv", index=False)
+    test_df.to_csv("data/processed/test.csv", index=False)
 
-    train_df.to_csv('data/processed/train.csv', index=False)
-    val_df.to_csv('data/processed/val.csv', index=False)
-    test_df.to_csv('data/processed/test.csv', index=False)
-
-    print("\n" + "=" * 50)
-    print("ДАННЫЕ ПОДГОТОВЛЕНЫ:")
+    print(f"\nИТОГИ:")
     print(f"  Train: {len(train_df)} изображений")
-    print(f"  Val: {len(val_df)} изображений")
-    print(f"  Test: {len(test_df)} изображений")
+    print(f"  Val:   {len(val_df)} изображений")
+    print(f"  Test:  {len(test_df)} изображений")
+    print(f"  Всего: {len(train_df) + len(val_df) + len(test_df)} изображений")
 
-    # Сохраняем информацию о классах
+    # 5. ИНФОРМАЦИЯ О КЛАССАХ
+    classes = sorted(df['class_name'].unique().tolist())
     class_info = {
-        'class_names': sorted(df_exists['class_name'].unique().tolist()),
-        'class_to_idx': {cls: idx for idx, cls in enumerate(sorted(df_exists['class_name'].unique()))},
-        'idx_to_class': {idx: cls for idx, cls in enumerate(sorted(df_exists['class_name'].unique()))},
-        'total_images': len(df_exists),
-        'train_size': len(train_df),
-        'val_size': len(val_df),
-        'test_size': len(test_df)
+        'class_names': classes,
+        'class_to_idx': {cls: idx for idx, cls in enumerate(classes)},
+        'idx_to_class': {idx: cls for idx, cls in enumerate(classes)}
     }
 
-    with open('data/processed/class_info.yaml', 'w', encoding='utf-8') as f:
+    with open("data/processed/class_info.yaml", 'w', encoding='utf-8') as f:
         yaml.dump(class_info, f, allow_unicode=True)
 
-    print(f"\nКлассы: {class_info['class_names']}")
+    print(f"\nКлассы ({len(classes)}): {', '.join(classes)}")
 
-    # Создаем упрощенный CSV для быстрой загрузки
-    df_exists[['local_path', 'class_name']].to_csv('data/processed/all_images.csv', index=False)
+    # 6. МЕТРИКИ ДАННЫХ
+    data_metrics = {
+        'total_images': len(df),
+        'train_size': len(train_df),
+        'val_size': len(val_df),
+        'test_size': len(test_df),
+        'classes': classes,
+        'class_distribution': {cls: len(df[df['class_name'] == cls]) for cls in classes}
+    }
 
-    print(f"\nСоздан файл data/processed/all_images.csv")
+    with open("metrics/data_metrics.json", 'w', encoding='utf-8') as f:
+        json.dump(data_metrics, f, indent=2, ensure_ascii=False)
+
+    print("\n" + "=" * 50)
+    print("ПОДГОТОВКА ДАННЫХ ЗАВЕРШЕНА УСПЕШНО!")
+    print("=" * 50)
+
+    return True
 
 
 if __name__ == "__main__":
-    prepare_data()
+    main()

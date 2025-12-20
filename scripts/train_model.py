@@ -391,3 +391,25 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+    # ... существующий код ...
+
+    # Сохраняем метрики обучения
+    train_metrics = {
+        'best_val_accuracy': float(trainer.best_val_acc),
+        'test_accuracy': float(test_acc),
+        'test_loss': float(test_loss),
+        'final_train_loss': float(history['train_loss'][-1]),
+        'final_train_accuracy': float(history['train_acc'][-1]),
+        'training_history': {
+            'train_loss': [float(x) for x in history['train_loss']],
+            'train_acc': [float(x) for x in history['train_acc']],
+            'val_loss': [float(x) for x in history['val_loss']],
+            'val_acc': [float(x) for x in history['val_acc']]
+        }
+    }
+
+    with open('metrics/train_metrics.json', 'w') as f:
+        json.dump(train_metrics, f, indent=4)
+
+    print(f"\nМетрики обучения сохранены в metrics/train_metrics.json")

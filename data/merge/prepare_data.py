@@ -87,3 +87,4 @@ with open(output_dir / 'class_info.yaml', 'w', encoding='utf-8') as f:
     yaml.dump(class_info, f, allow_unicode=True)
 
 print(f"\nКлассы: {class_info['class_names']}")
+
