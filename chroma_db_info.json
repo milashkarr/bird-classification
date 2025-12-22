@@ -1,0 +1,15 @@
+{
+  "total_images": 485,
+  "classes": [
+    "brambling",
+    "chiffchaff",
+    "goldfinch",
+    "nuthatch",
+    "swallow"
+  ],
+  "successful": 485,
+  "failed": 0,
+  "collection_name": "bird_images",
+  "embedding_dimension": 512,
+  "path_column_used": "local_path"
+}

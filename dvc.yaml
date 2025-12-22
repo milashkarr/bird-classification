@@ -4,21 +4,19 @@ stages:
     deps:
       - scripts/simple_prepare.py
       - data/raw
-    params:
-      - RAW_DATA_PATH
     outs:
       - data/processed/train.csv
       - data/processed/val.csv
       - data/processed/test.csv
-      - data/processed/class_info.yaml
       - metrics/data_metrics.json
   
   train:
-    cmd: python scripts/simple_train.py
+    cmd: python scripts/train.py
     deps:
-      - scripts/simple_train.py
+      - scripts/train.py
       - data/processed/train.csv
       - data/processed/val.csv
+      - data/processed/test.csv
     outs:
       - models/best_model.pth
       - metrics/train_metrics.json
@@ -43,4 +41,3 @@ stages:
       - chroma_db_info.json
     outs:
       - metrics/summary.json
-      

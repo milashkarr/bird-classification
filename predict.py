@@ -18,36 +18,36 @@ class MinimalBirdClassifier:
         self.root.geometry("900x650")
         self.root.resizable(True, True)
 
-        # Центрируем окно
         self.center_window()
 
-        # Загрузка модели
         self.class_names = ['Зяблик', 'Пеночка', 'Щегол', 'Поползень', 'Ласточка']
+        self.class_name_mapping = {
+            'Зяблик': 'brambling',
+            'Пеночка': 'chiffchaff',
+            'Щегол': 'goldfinch',
+            'Поползень': 'nuthatch',
+            'Ласточка': 'swallow'
+        }
         self.model = self.load_model()
 
-        # Модель для эмбеддингов
-        self.embedding_model = self.create_embedding_model()
+        self.embedding_model = self.create_embeddings_model()
 
-        # Подключение к векторной БД
         self.chroma_client = None
         self.collection = None
         self.connect_to_vector_db()
 
-        # Трансформации
         self.transform = transforms.Compose([
             transforms.Resize((224, 224)),
             transforms.ToTensor(),
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])
 
-        # Инициализация
         self.current_image = None
         self.photo = None
 
         self.setup_ui()
 
     def center_window(self):
-        """Центрирование окна"""
         self.root.update_idletasks()
         width = self.root.winfo_width()
         height = self.root.winfo_height()
@@ -55,34 +55,34 @@ class MinimalBirdClassifier:
         y = (self.root.winfo_screenheight() // 2) - (height // 2)
         self.root.geometry(f'{width}x{height}+{x}+{y}')
 
-    def create_embedding_model(self):
-        """Создаем модель для извлечения эмбеддингов"""
-        model = models.mobilenet_v2()
+    def create_embeddings_model(self):
+        print("Загрузка модели для эмбеддингов...")
 
-        try:
-            if Path("models/best_model.pth").exists():
-                checkpoint = torch.load("models/best_model.pth",
-                                        map_location='cpu',
-                                        weights_only=False)
-
-                if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
-                    model.load_state_dict(checkpoint['model_state_dict'])
-                else:
-                    model.load_state_dict(checkpoint)
-        except Exception as e:
-            print(f"Ошибка загрузки модели для эмбеддингов: {e}")
-
-        # Удаляем последний слой (классификатор)
-        model.classifier = nn.Sequential(
-            *list(model.classifier.children())[:-1]
+        model = models.resnet18(weights=None)
+        model.fc = nn.Sequential(
+            nn.Dropout(0.5),
+            nn.Linear(model.fc.in_features, 5)
         )
+
+        checkpoint = torch.load("models/best_model.pth", map_location='cpu')
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            model.load_state_dict(checkpoint['model_state_dict'])
+            print(f"  Загружена наша модель ({checkpoint.get('val_acc', 'N/A')}%)")
+        else:
+            model.load_state_dict(checkpoint)
+
+        model.fc = nn.Identity()
+
         model.eval()
         return model
 
     def load_model(self):
-        """Загрузка модели классификации"""
-        model = models.mobilenet_v2()
-        model.classifier[1] = nn.Linear(model.classifier[1].in_features, 5)
+        model = models.resnet18()
+
+        model.fc = nn.Sequential(
+            nn.Dropout(0.5),
+            nn.Linear(model.fc.in_features, 5)  # 5 классов
+        )
 
         try:
             if Path("models/best_model.pth").exists():
@@ -92,16 +92,17 @@ class MinimalBirdClassifier:
 
                 if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
                     model.load_state_dict(checkpoint['model_state_dict'])
+                    print(f"Загружена модель ResNet18 с точностью {checkpoint.get('val_acc', 'N/A')}%")
                 else:
                     model.load_state_dict(checkpoint)
+                    print("Загружена модель ResNet18")
         except Exception as e:
-            print(f"Ошибка загрузки модели: {e}")
+            print(f"ОШИБКА ЗАГРУЗКИ МОДЕЛИ: {e}")
 
         model.eval()
         return model
 
     def connect_to_vector_db(self):
-        """Подключение к векторной БД"""
         try:
             if Path("./chroma_db").exists():
                 self.chroma_client = chromadb.PersistentClient(
@@ -111,14 +112,13 @@ class MinimalBirdClassifier:
                 self.collection = self.chroma_client.get_collection(name="bird_images")
                 print("Векторная БД подключена успешно")
             else:
-                print("Векторная БД не найдена. Запустите scripts/create_embeddings.py")
+                print("Векторная БД не найдена")
                 self.collection = None
         except Exception as e:
             print(f"Ошибка подключения к векторной БД: {e}")
             self.collection = None
 
     def extract_embedding(self, image):
-        """Извлекаем эмбеддинг из изображения"""
         img_tensor = self.transform(image).unsqueeze(0)
 
         with torch.no_grad():
@@ -127,7 +127,6 @@ class MinimalBirdClassifier:
         return embedding.squeeze().numpy().tolist()
 
     def search_similar_images(self, embedding, n_results=10):
-        """Поиск похожих изображений"""
         if self.collection is None:
             print("Векторная БД не подключена")
             return []
@@ -135,27 +134,57 @@ class MinimalBirdClassifier:
         try:
             results = self.collection.query(
                 query_embeddings=[embedding],
-                n_results=n_results
+                n_results=50
             )
 
+            with torch.no_grad():
+                img_tensor = self.transform(self.current_image).unsqueeze(0)
+                outputs = self.model(img_tensor)
+                probs = torch.nn.functional.softmax(outputs, dim=1)
+                prob, predicted_idx = torch.max(outputs, 1)
+                predicted_class_ru = self.class_names[predicted_idx.item()]
+
+                predicted_class_en = self.class_name_mapping.get(predicted_class_ru, predicted_class_ru)
+
+            class_counts = {}
+            for metadata in results['metadatas'][0]:
+                class_name = metadata['class_name']
+                class_counts[class_name] = class_counts.get(class_name, 0) + 1
+
             similar_images = []
-            if results and results.get('ids') and len(results['ids']) > 0:
-                for i in range(len(results['ids'][0])):
+            other_class_images = []
+
+            for i in range(len(results['ids'][0])):
+                metadata = results['metadatas'][0][i]
+
+                if metadata['class_name'] == predicted_class_en:
                     similar_images.append({
                         'id': results['ids'][0][i],
-                        'path': results['metadatas'][0][i]['path'],
-                        'class_name': results['metadatas'][0][i]['class_name'],
+                        'path': metadata['path'],
+                        'class_name': metadata['class_name'],
+                        'distance': results['distances'][0][i]
+                    })
+                else:
+                    other_class_images.append({
+                        'id': results['ids'][0][i],
+                        'path': metadata['path'],
+                        'class_name': metadata['class_name'],
                         'distance': results['distances'][0][i]
                     })
 
-            return similar_images
+            if len(similar_images) < n_results:
+                need_more = n_results - len(similar_images)
+                similar_images.extend(other_class_images[:need_more])
+
+            return similar_images[:n_results]
+
         except Exception as e:
             print(f"Ошибка поиска похожих изображений: {e}")
+            import traceback
+            traceback.print_exc()
             return []
 
     def setup_ui(self):
-        """Создание минималистичного интерфейса"""
-        # Главный контейнер
         main_container = ttk.Frame(self.root, padding="10")
         main_container.pack(fill=tk.BOTH, expand=True)
 
@@ -172,7 +201,6 @@ class MinimalBirdClassifier:
         control_frame = tk.Frame(main_container, bg='#ecf0f1', relief=tk.RAISED, borderwidth=1)
         control_frame.pack(fill=tk.X, pady=(0, 10))
 
-        # Кнопки
         btn_frame = tk.Frame(control_frame, bg='#ecf0f1')
         btn_frame.pack(pady=8)
 
@@ -205,11 +233,9 @@ class MinimalBirdClassifier:
         content_frame = ttk.Frame(main_container)
         content_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Левая часть - изображение
         left_panel = ttk.Frame(content_frame, width=350)
         left_panel.pack(side=tk.LEFT, fill=tk.BOTH, padx=(0, 10))
 
-        # Правая часть - результаты
         right_panel = ttk.Frame(content_frame)
         right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
@@ -223,7 +249,6 @@ class MinimalBirdClassifier:
         )
         image_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Контейнер для изображения
         self.image_label = tk.Label(
             image_frame,
             text="",
@@ -244,12 +269,10 @@ class MinimalBirdClassifier:
         )
         result_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
 
-        # Контейнер для текста
         result_text_frame = tk.Frame(result_frame, height=220)
         result_text_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         result_text_frame.pack_propagate(False)
 
-        # Многострочный текст
         self.result_text = tk.Text(
             result_text_frame,
             font=('Arial', 10),
@@ -263,7 +286,6 @@ class MinimalBirdClassifier:
         )
         self.result_text.pack(fill=tk.BOTH, expand=True)
 
-        # Начальный текст
         self.result_text.insert(1.0, "")
         self.result_text.config(state=tk.DISABLED)
 
@@ -277,7 +299,6 @@ class MinimalBirdClassifier:
         )
         similar_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Canvas с прокруткой
         self.similar_canvas = tk.Canvas(similar_frame, bg='white', highlightthickness=0)
         scrollbar = ttk.Scrollbar(similar_frame, orient="vertical", command=self.similar_canvas.yview)
 
@@ -293,7 +314,6 @@ class MinimalBirdClassifier:
         self.similar_canvas.pack(side="left", fill="both", expand=True, padx=10, pady=10)
         scrollbar.pack(side="right", fill="y", pady=10)
 
-        # Заглушка
         tk.Label(
             self.scrollable_frame,
             text="Похожие изображения появятся здесь",
@@ -303,7 +323,6 @@ class MinimalBirdClassifier:
             justify=tk.CENTER
         ).pack(pady=40)
 
-        # 4. СТАТУС БАР
         self.status_bar = tk.Label(
             main_container,
             text="Готов",
@@ -316,19 +335,16 @@ class MinimalBirdClassifier:
         self.status_bar.pack(fill=tk.X, pady=(10, 0))
 
     def select_image(self):
-        """Выбор изображения"""
         file_path = filedialog.askopenfilename(
             filetypes=[("Изображения", "*.jpg *.jpeg *.png")]
         )
 
         if file_path:
             try:
-                # Загрузка и масштабирование
                 image = Image.open(file_path)
                 preview = image.copy()
                 preview.thumbnail((320, 240), Image.Resampling.LANCZOS)
 
-                # Конвертируем
                 self.photo = ImageTk.PhotoImage(preview)
                 self.image_label.config(
                     image=self.photo,
@@ -336,23 +352,18 @@ class MinimalBirdClassifier:
                     bg="white"
                 )
 
-                # Сохраняем оригинал
                 self.current_image = image.convert('RGB')
 
-                # Активируем кнопку
                 self.classify_btn.config(state=tk.NORMAL, bg="#27ae60")
 
-                # Обновляем статус
                 self.status_bar.config(text="Изображение загружено")
 
-                # Очищаем результаты
                 self.clear_results()
 
             except Exception as e:
                 self.status_bar.config(text=f"Ошибка загрузки")
 
     def classify_image(self):
-        """Классификация изображения и поиск похожих"""
         if self.current_image is None:
             return
 
@@ -361,7 +372,6 @@ class MinimalBirdClassifier:
             self.classify_btn.config(state=tk.DISABLED, bg="#95a5a6")
             self.root.update()
 
-            # Преобразуем изображение
             img_tensor = self.transform(self.current_image).unsqueeze(0)
 
             # 1. Классификация
@@ -370,7 +380,6 @@ class MinimalBirdClassifier:
                 probs = torch.nn.functional.softmax(outputs, dim=1)
                 prob, idx = torch.max(probs, dim=1)
 
-            # Результат классификации
             bird_class = self.class_names[idx.item()]
             confidence = prob.item() * 100
 
@@ -378,7 +387,6 @@ class MinimalBirdClassifier:
             embedding = self.extract_embedding(self.current_image)
             similar_images = self.search_similar_images(embedding, n_results=10)
 
-            # Отображаем результаты
             self.show_results(bird_class, confidence, probs)
             self.show_similar_images(similar_images)
 
@@ -393,7 +401,6 @@ class MinimalBirdClassifier:
             self.classify_btn.config(state=tk.NORMAL, bg="#2ecc71")
 
     def show_results(self, bird_class, confidence, probs):
-        """Отображение результатов"""
         self.result_text.config(state=tk.NORMAL)
         self.result_text.delete(1.0, tk.END)
 
@@ -406,12 +413,11 @@ class MinimalBirdClassifier:
 
         result += "Вероятности по другим классам:\n"
 
-        # Сортируем по вероятности (исключая основной класс)
         sorted_probs, sorted_indices = torch.sort(probs, descending=True)
 
         for i in range(len(self.class_names)):
             if i == 0:
-                continue  # Пропускаем основной класс
+                continue
 
             class_idx = sorted_indices[0][i].item()
             class_name = self.class_names[class_idx]
@@ -419,14 +425,11 @@ class MinimalBirdClassifier:
 
             result += f"{class_name:10} - {prob_value:5.1f}%\n"
 
-        # Вставляем текст
         self.result_text.insert(1.0, result)
         self.result_text.config(state=tk.DISABLED)
         self.result_text.see(1.0)
 
     def show_similar_images(self, similar_images):
-        """Отображение похожих изображений"""
-        # Очищаем старые изображения
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
 
@@ -441,41 +444,32 @@ class MinimalBirdClassifier:
             ).pack(pady=40)
             return
 
-        # Создаем сетку для изображений (2 колонки)
         grid_frame = tk.Frame(self.scrollable_frame, bg='white')
         grid_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # Отображаем похожие изображения в сетке 2x5
-        for i, img_info in enumerate(similar_images[:10]):  # Максимум 10 изображений
+        for i, img_info in enumerate(similar_images[:10]):
             try:
-                # Загрузка изображения
                 img_path = img_info['path']
                 if not Path(img_path).exists():
-                    # Пробуем другой путь
                     filename = Path(img_path).name
                     img_path = f"data/raw/{img_info['class_name']}/{filename}"
 
                 if Path(img_path).exists():
                     img = Image.open(img_path)
 
-                    # Увеличиваем размер миниатюр
-                    img.thumbnail((120, 120), Image.Resampling.LANCZOS)  # Было 80x80
+                    img.thumbnail((120, 120), Image.Resampling.LANCZOS)
                     photo = ImageTk.PhotoImage(img)
 
-                    # Создаем фрейм для каждого изображения
                     img_frame = tk.Frame(grid_frame, bg='white', relief=tk.RAISED, borderwidth=1)
 
-                    # Позиционируем в сетке
-                    row = i // 2  # 2 колонки
+                    row = i // 2
                     col = i % 2
                     img_frame.grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
 
-                    # Изображение
                     img_label = tk.Label(img_frame, image=photo, bg='white')
                     img_label.image = photo  # Сохраняем ссылку
                     img_label.pack(padx=5, pady=5)
 
-                    # Название класса под изображением
                     class_label = tk.Label(
                         img_frame,
                         text=img_info['class_name'],
@@ -489,11 +483,9 @@ class MinimalBirdClassifier:
                 print(f"Ошибка загрузки похожего изображения: {e}")
                 continue
 
-        # Настраиваем веса колонок для равномерного распределения
         grid_frame.columnconfigure(0, weight=1)
         grid_frame.columnconfigure(1, weight=1)
 
-        # Если не нашли ни одного изображения
         if not grid_frame.winfo_children():
             tk.Label(
                 self.scrollable_frame,
@@ -505,7 +497,6 @@ class MinimalBirdClassifier:
             ).pack(pady=40)
 
     def clear_results(self):
-        """Очистка результатов"""
         self.result_text.config(state=tk.NORMAL)
         self.result_text.delete(1.0, tk.END)
         self.result_text.config(state=tk.DISABLED)
@@ -523,26 +514,13 @@ class MinimalBirdClassifier:
         ).pack(pady=40)
 
     def run(self):
-        """Запуск приложения"""
         self.root.mainloop()
 
 
 def main():
-    """Точка входа"""
     app = MinimalBirdClassifier()
     app.run()
 
 
 if __name__ == "__main__":
-    # Скрываем консоль на Windows
-    import sys
-
-    if sys.platform == "win32":
-        try:
-            import ctypes
-
-            ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
-        except:
-            pass
-
     main()
