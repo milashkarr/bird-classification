@@ -10,28 +10,21 @@ stages:
       nfiles: 485
     - path: scripts/simple_prepare.py
       hash: md5
-      md5: 95614bd7531163efd8c062fb18eca2d3
-      size: 4913
-    params:
-      params.yaml:
-        RAW_DATA_PATH: C:/Users/Lada/Documents/DS/naturalist/data/raw
+      md5: 0fc4208d8d89fe9b68c59bbc1dbffa38
+      size: 4195
     outs:
-    - path: data/processed/class_info.yaml
-      hash: md5
-      md5: 185723e91c62df5931076f7a196392c9
-      size: 166
     - path: data/processed/test.csv
       hash: md5
-      md5: 669f315cb4c5698c0c1289264a803b85
-      size: 4024
+      md5: 03655363a614bcd37b91cff818d0190a
+      size: 4020
     - path: data/processed/train.csv
       hash: md5
-      md5: 33abb9ea62a3bbe01d9c2c7d4cb97875
-      size: 18572
+      md5: bbafb601be1f96102ae55fd91a4abf01
+      size: 18562
     - path: data/processed/val.csv
       hash: md5
-      md5: bb9f6c789922b328a3670efc3c939a31
-      size: 4020
+      md5: 4e8c9947ac68f434b06573c31c6d4f4b
+      size: 4034
     - path: metrics/data_metrics.json
       hash: md5
       md5: beea66141e895d75ab5ff929d31a362b
@@ -41,79 +34,75 @@ stages:
     deps:
     - path: data/processed/test.csv
       hash: md5
-      md5: 669f315cb4c5698c0c1289264a803b85
-      size: 4024
+      md5: 03655363a614bcd37b91cff818d0190a
+      size: 4020
     - path: data/processed/train.csv
       hash: md5
-      md5: 33abb9ea62a3bbe01d9c2c7d4cb97875
-      size: 18572
+      md5: bbafb601be1f96102ae55fd91a4abf01
+      size: 18562
     - path: data/processed/val.csv
       hash: md5
-      md5: bb9f6c789922b328a3670efc3c939a31
-      size: 4020
+      md5: 4e8c9947ac68f434b06573c31c6d4f4b
+      size: 4034
     - path: scripts/train.py
       hash: md5
-      md5: d5f920fc2d61b104046931781c0967bd
-      size: 6675
+      md5: f0f3973d8b7e1f55f59a6ae3c4edab16
+      size: 6643
     outs:
     - path: metrics/train_metrics.json
       hash: md5
-      md5: 7bd1755f120fbc54c86760994d2c4678
-      size: 318
+      md5: 00f50fd2627a7880e73d2b7ecf036908
+      size: 317
     - path: models/best_model.pth
       hash: md5
-      md5: 51a19a8f4c55617efe6d4d8cbd3335da
+      md5: d311d8af4ea65e0a0a1399dbc775fd59
       size: 44794507
+  embeddings:
+    cmd: python scripts/create_embeddings.py
+    deps:
+    - path: data/processed/test.csv
+      hash: md5
+      md5: 03655363a614bcd37b91cff818d0190a
+      size: 4020
+    - path: data/processed/train.csv
+      hash: md5
+      md5: bbafb601be1f96102ae55fd91a4abf01
+      size: 18562
+    - path: data/processed/val.csv
+      hash: md5
+      md5: 4e8c9947ac68f434b06573c31c6d4f4b
+      size: 4034
+    - path: models/best_model.pth
+      hash: md5
+      md5: d311d8af4ea65e0a0a1399dbc775fd59
+      size: 44794507
+    - path: scripts/create_embeddings.py
+      hash: md5
+      md5: 08e4d8c4e6102603a22f89156e5b17b5
+      size: 10276
+    outs:
+    - path: chroma_db
+      hash: md5
+      md5: 3f81e21e88224dc5117915808d73a8ea.dir
+      size: 2627748
+      nfiles: 5
   report:
     cmd: python scripts/create_report.py
     deps:
     - path: chroma_db_info.json
       hash: md5
-      md5: 5042a59cb67440af900de295343741e2
-      size: 280
+      md5: 4194d7052874092b1b0344804c40d23a
+      size: 279
     - path: metrics/data_metrics.json
       hash: md5
       md5: beea66141e895d75ab5ff929d31a362b
       size: 755
     - path: metrics/train_metrics.json
       hash: md5
-      md5: 7bd1755f120fbc54c86760994d2c4678
-      size: 318
+      md5: 00f50fd2627a7880e73d2b7ecf036908
+      size: 317
     outs:
     - path: metrics/summary.json
       hash: md5
-      md5: 60adcfdc5ed91baca5dc9835edbbec99
-      size: 1793
-  embeddings:
-    cmd: python scripts/create_embeddings.py
-    deps:
-    - path: data/processed/test.csv
-      hash: md5
-      md5: 669f315cb4c5698c0c1289264a803b85
-      size: 4024
-    - path: data/processed/train.csv
-      hash: md5
-      md5: 33abb9ea62a3bbe01d9c2c7d4cb97875
-      size: 18572
-    - path: data/processed/val.csv
-      hash: md5
-      md5: bb9f6c789922b328a3670efc3c939a31
-      size: 4020
-    - path: models/best_model.pth
-      hash: md5
-      md5: 51a19a8f4c55617efe6d4d8cbd3335da
-      size: 44794507
-    - path: scripts/create_embeddings.py
-      hash: md5
-      md5: 718d1acbe82330be970458f325e29b90
-      size: 11839
-    outs:
-    - path: chroma_db
-      hash: md5
-      md5: 5ffc0d1e9ab315222fab175764f007fc.dir
-      size: 2623652
-      nfiles: 5
-    - path: chroma_db_info.json
-      hash: md5
-      md5: 4194d7052874092b1b0344804c40d23a
-      size: 279
+      md5: 4a54155ffe4ba36e323bd6f879c8d81c
+      size: 1791

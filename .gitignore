@@ -106,3 +106,5 @@ chroma_db/
 
 # DVC storage
 dvc_storage/
+chroma_db_info.json
+/chroma_db

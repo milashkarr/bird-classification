@@ -36,7 +36,7 @@ def create_embeddings_model():
     test_input = torch.randn(1, 3, 224, 224)
     with torch.no_grad():
         output = model(test_input)
-    print(f"  Размерность эмбеддингов: {output.shape[1]}")  # 512
+    print(f"  Размерность эмбеддингов: {output.shape[1]}")
 
     model.eval()
     return model

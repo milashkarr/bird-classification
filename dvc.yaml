@@ -31,7 +31,6 @@ stages:
       - data/processed/test.csv
     outs:
       - chroma_db
-      - chroma_db_info.json
   
   report:
     cmd: python scripts/create_report.py
