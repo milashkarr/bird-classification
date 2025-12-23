@@ -8,6 +8,22 @@ from PIL import Image
 import os
 from pathlib import Path
 import json
+import yaml
+
+with open('params.yaml', 'r') as f:
+    params = yaml.safe_load(f)
+
+EPOCHS = params['train']['epochs']
+BATCH_SIZE = params['train']['batch_size']
+LEARNING_RATE = params['train']['learning_rate']
+WEIGHT_DECAY = params['train']['weight_decay']
+IMAGE_SIZE = params['train']['image_size']
+RESIZE_SIZE = params['train']['resize_size']
+MODEL_NAME = params['model']['name']
+NUM_CLASSES = params['model']['num_classes']
+PRETRAINED = params['model']['pretrained']
+FREEZE_LAYERS = params['train']['freeze_layers']
+UNFREEZE_LAST_N = params['train']['unfreeze_last_n_layers']
 
 class BirdDataset:
     def __init__(self, csv_file, transform=None):
@@ -40,8 +56,8 @@ def main():
 
     # аугментация
     train_transform = transforms.Compose([
-        transforms.Resize((256, 256)),
-        transforms.RandomCrop(224),
+        transforms.Resize((RESIZE_SIZE, RESIZE_SIZE)),
+        transforms.RandomCrop(IMAGE_SIZE),
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomRotation(15),
         transforms.ColorJitter(brightness=0.2, contrast=0.2),
@@ -59,15 +75,19 @@ def main():
     train_data = BirdDataset("data/processed/train.csv", train_transform)
     val_data = BirdDataset("data/processed/val.csv", val_transform)
 
-    train_loader = DataLoader(train_data, batch_size=16, shuffle=True)
-    val_loader = DataLoader(val_data, batch_size=16, shuffle=False)
+    train_loader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
+    val_loader = DataLoader(val_data, batch_size=BATCH_SIZE, shuffle=False)
 
     num_classes = len(train_data.classes)
     print(f"Классов: {num_classes} ({train_data.classes})")
     print(f"Train: {len(train_data)}, Val: {len(val_data)}")
 
     print("\nСоздание модели...")
-    model = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
+
+    if MODEL_NAME == "resnet18":
+        model = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1 if PRETRAINED else None)
+    else:
+        raise ValueError(f"Модель {MODEL_NAME} не поддерживается")
 
     # Замораживаем слои
     for param in model.parameters():
@@ -82,18 +102,18 @@ def main():
     # Классификатор
     model.fc = nn.Sequential(
         nn.Dropout(0.5),
-        nn.Linear(model.fc.in_features, num_classes)
+        nn.Linear(model.fc.in_features, NUM_CLASSES)
     )
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()),
-                           lr=0.0005, weight_decay=1e-4)
+                           lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
 
     print("\nОбучение...")
     best_acc = 0.0
     history = []
 
-    for epoch in range(30):
+    for epoch in range(EPOCHS):
         # Train
         model.train()
         train_correct = 0
@@ -151,11 +171,12 @@ def main():
                 'classes': train_data.classes
             }, "models/best_model.pth")
 
+
     print(f"\nЛучшая точность: {best_acc:.2f}%")
 
     print("\nТестирование лучшей модели...")
     test_data = BirdDataset("data/processed/test.csv", val_transform)
-    test_loader = DataLoader(test_data, batch_size=16, shuffle=False)
+    test_loader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=False)
 
     model.eval()
     test_correct = 0
@@ -175,10 +196,13 @@ def main():
     metrics = {
         'best_val_acc': best_acc,
         'test_acc': test_acc,
-        'epochs': 30,
+        'epochs': EPOCHS,
+        'batch_size': BATCH_SIZE,
+        'learning_rate': LEARNING_RATE,
+        'weight_decay': WEIGHT_DECAY,
         'classes': train_data.classes,
-        'model': 'ResNet18_optimal',
-        'note': 'Возврат к параметрам которые давали 67%'
+        'model': MODEL_NAME,
+        'params': params
     }
 
     os.makedirs("metrics", exist_ok=True)
@@ -188,7 +212,6 @@ def main():
     print("\nГотово!")
     print(f"\nВсе модели сохранены в папке models/")
     print(f"Лучшая модель: models/best_model.pth ({best_acc:.1f}%)")
-
 
 if __name__ == "__main__":
     main()
