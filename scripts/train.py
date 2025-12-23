@@ -51,6 +51,12 @@ class BirdDataset:
 
 
 def main():
+    train_loss_history = []
+    train_acc_history = []
+    val_acc_history = []
+
+    os.makedirs("metrics/tmp", exist_ok=True)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Устройство: {device}")
 
@@ -118,6 +124,7 @@ def main():
         model.train()
         train_correct = 0
         train_total = 0
+        epoch_train_loss = 0.0
 
         for images, labels in train_loader:
             images, labels = images.to(device), labels.to(device)
@@ -127,11 +134,13 @@ def main():
             loss.backward()
             optimizer.step()
 
+            epoch_train_loss += loss.item()
             _, predicted = outputs.max(1)
             train_total += labels.size(0)
             train_correct += predicted.eq(labels).sum().item()
 
         train_acc = 100. * train_correct / train_total
+        avg_train_loss = epoch_train_loss / len(train_loader)
 
         model.eval()
         val_correct = 0
@@ -148,7 +157,8 @@ def main():
         val_acc = 100. * val_correct / val_total
         history.append((train_acc, val_acc))
 
-        print(f'Epoch {epoch + 1}/30: Train: {train_acc:.1f}%, Val: {val_acc:.1f}%')
+        print(
+            f'Epoch {epoch + 1}/{EPOCHS}: Train: {train_acc:.1f}%, Val: {val_acc:.1f}%, Loss: {avg_train_loss:.4f}')
 
         if val_acc > 65:
             os.makedirs("models", exist_ok=True)
@@ -171,10 +181,25 @@ def main():
                 'classes': train_data.classes
             }, "models/best_model.pth")
 
+        history_metrics = {
+            'epoch': epoch + 1,
+            'train_acc': train_acc,
+            'val_acc': val_acc,
+            'train_loss': avg_train_loss
+        }
 
-    print(f"\nЛучшая точность: {best_acc:.2f}%")
+        with open(f"metrics/tmp/epoch_{epoch + 1}.json", "w", encoding="utf-8") as f:
+            json.dump(history_metrics, f, ensure_ascii=False, indent=2)
+
+        train_acc_history.append(train_acc)
+        val_acc_history.append(val_acc)
+        train_loss_history.append(avg_train_loss)
 
     print("\nТестирование лучшей модели...")
+
+    checkpoint = torch.load("models/best_model.pth", map_location=device)
+    model.load_state_dict(checkpoint['model_state_dict'])
+
     test_data = BirdDataset("data/processed/test.csv", val_transform)
     test_loader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=False)
 
@@ -193,7 +218,19 @@ def main():
     test_acc = 100. * test_correct / test_total
     print(f"Test Accuracy: {test_acc:.2f}%")
 
-    metrics = {
+    history_data = []
+    for i in range(EPOCHS):
+        history_data.append({
+            'epoch': i + 1,
+            'train_acc': train_acc_history[i],
+            'val_acc': val_acc_history[i],
+            'train_loss': train_loss_history[i]
+        })
+
+    with open("metrics/training_history.json", "w", encoding="utf-8") as f:
+        json.dump(history_data, f, ensure_ascii=False, indent=2)
+
+    final_metrics = {
         'best_val_acc': best_acc,
         'test_acc': test_acc,
         'epochs': EPOCHS,
@@ -205,13 +242,14 @@ def main():
         'params': params
     }
 
-    os.makedirs("metrics", exist_ok=True)
     with open("metrics/train_metrics.json", "w", encoding="utf-8") as f:
-        json.dump(metrics, f, ensure_ascii=False, indent=2)
+        json.dump(final_metrics, f, ensure_ascii=False, indent=2)
 
-    print("\nГотово!")
+    print(f"\nЛучшая точность на валидации: {best_acc:.2f}%")
+    print(f"Точность на тесте: {test_acc:.2f}%")
     print(f"\nВсе модели сохранены в папке models/")
     print(f"Лучшая модель: models/best_model.pth ({best_acc:.1f}%)")
+
 
 if __name__ == "__main__":
     main()

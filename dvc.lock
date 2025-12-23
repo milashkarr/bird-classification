@@ -46,16 +46,16 @@ stages:
       size: 4034
     - path: scripts/train.py
       hash: md5
-      md5: f0f3973d8b7e1f55f59a6ae3c4edab16
-      size: 6643
+      md5: e0aceb385652955bdb7813b7e2cdb09b
+      size: 8900
     outs:
     - path: metrics/train_metrics.json
       hash: md5
-      md5: 00f50fd2627a7880e73d2b7ecf036908
-      size: 317
+      md5: 848ec0595bd0e67776e2d3780c91cec0
+      size: 1439
     - path: models/best_model.pth
       hash: md5
-      md5: d311d8af4ea65e0a0a1399dbc775fd59
+      md5: 4e4cf73cdc89b3137fd1ab9298ba29eb
       size: 44794507
   embeddings:
     cmd: python scripts/create_embeddings.py
@@ -74,17 +74,17 @@ stages:
       size: 4034
     - path: models/best_model.pth
       hash: md5
-      md5: d311d8af4ea65e0a0a1399dbc775fd59
+      md5: 4e4cf73cdc89b3137fd1ab9298ba29eb
       size: 44794507
     - path: scripts/create_embeddings.py
       hash: md5
-      md5: 08e4d8c4e6102603a22f89156e5b17b5
-      size: 10276
+      md5: b02ed12fa0ef3bae624b573487c2eabf
+      size: 10256
     outs:
     - path: chroma_db
       hash: md5
-      md5: 3f81e21e88224dc5117915808d73a8ea.dir
-      size: 2627748
+      md5: fec93721a8116839f0e2901e98d83f53.dir
+      size: 2623652
       nfiles: 5
   report:
     cmd: python scripts/create_report.py
@@ -99,10 +99,10 @@ stages:
       size: 755
     - path: metrics/train_metrics.json
       hash: md5
-      md5: 00f50fd2627a7880e73d2b7ecf036908
-      size: 317
+      md5: 848ec0595bd0e67776e2d3780c91cec0
+      size: 1439
     outs:
     - path: metrics/summary.json
       hash: md5
-      md5: 4a54155ffe4ba36e323bd6f879c8d81c
-      size: 1791
+      md5: 1d931aaff720246358eaaa3596be736a
+      size: 3012

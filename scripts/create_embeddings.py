@@ -20,7 +20,7 @@ def create_embeddings_model():
     model = models.resnet18(weights=None)
     model.fc = nn.Sequential(
         nn.Dropout(0.5),
-        nn.Linear(model.fc.in_features, 5)  # 5 классов
+        nn.Linear(model.fc.in_features, 5)
     )
 
     checkpoint = torch.load("models/best_model.pth", map_location='cpu')

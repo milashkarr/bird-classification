@@ -17,6 +17,7 @@ stages:
       - data/processed/train.csv
       - data/processed/val.csv
       - data/processed/test.csv
+      - params.yaml 
     outs:
       - models/best_model.pth
       - metrics/train_metrics.json
@@ -40,3 +41,20 @@ stages:
       - chroma_db_info.json
     outs:
       - metrics/summary.json
+  
+plots:
+  - metrics/training_history.json:
+      x: epoch
+      y:
+        - train_acc
+        - val_acc
+      title: "Точность модели по эпохам"
+      x_label: "Эпоха"
+      y_label: "Точность (%)"
+      
+  - metrics/training_history.json:
+      x: epoch
+      y: train_loss
+      title: "Функция потерь по эпохам"
+      x_label: "Эпоха"
+      y_label: "Loss"

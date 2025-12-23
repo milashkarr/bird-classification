@@ -1,47 +1,43 @@
-RAW_DATA_PATH: "C:/Users/Lada/Documents/DS/naturalist/data/raw"
+RAW_DATA_PATH: C:/Users/Lada/Documents/DS/naturalist/data/raw
 
 data:
-  processed_path: "data/processed"
+  processed_path: data/processed
   split:
     train_ratio: 0.7
     val_ratio: 0.15
     test_ratio: 0.15
 
 model:
-  name: "resnet18"
+  name: resnet18
   pretrained: true
   num_classes: 5
 
 train:
   epochs: 30
   batch_size: 16
-  learning_rate: 0.0005
+  learning_rate: 0.001
   weight_decay: 0.0001
-  device: "cpu"
-  
+  device: cpu
   freeze_layers: true
   unfreeze_last_n_layers: 2
-  
+
   image_size: 224
   resize_size: 256
 
 embeddings:
   batch_size: 32
   embedding_dim: 512
-  
+
 chromadb:
-  collection_name: "bird_images"
-  persist_directory: "./chroma_db"
-  
+  collection_name: bird_images
+  persist_directory: ./chroma_db
 paths:
-  models_dir: "models"
-  metrics_dir: "metrics"
-  reports_dir: "reports"
-  
+  models_dir: models
+  metrics_dir: metrics
+  reports_dir: reports
 experiment:
-  name: "bird_classification"
-  version: "1.0"
-  
+  name: bird_classification
+  version: '1.0'
 metrics:
   target_accuracy: 70.0
   save_best_only: true
